@@ -100,6 +100,33 @@ class Orchestrator:
             log.info("scan_start", scan_id=scan_id, targets=len(targets))
             metric_tasks.add(1, {"task": "scan_start"})
 
+            # Demo mode: simulate findings without external tools
+            if demo or self.cfg.runtime.demo:
+                demo_ports = ports or [80, 443]
+                for t in targets:
+                    try:
+                        ipaddress.ip_address(t)
+                    except ValueError:
+                        continue
+                    for p in demo_ports[:3]:
+                        finding = Finding(
+                            scan_id=scan_id,
+                            ip=t,
+                            port=p,
+                            proto="tcp",
+                            state="open",
+                            service="http" if p in (80, 8080) else ("https" if p in (443, 8443) else None),
+                            product=None,
+                            version=None,
+                            discovered_by="demo",
+                        )
+                        doc = finding.to_doc()
+                        self.es.index_finding(doc)
+                        metric_findings.add(1)
+                        await self._maybe_kafka(self.cfg.kafka.topic_findings, doc)
+                log.info("scan_complete_demo", scan_id=scan_id)
+                return scan_id
+
             # Build shards
             filtered_targets: List[str] = []
             blocklist_nets: List[ipaddress._BaseNetwork] = []
@@ -202,4 +229,3 @@ class Orchestrator:
         self.es.index_finding(doc)
         metric_findings.add(1)
         await self._maybe_kafka(self.cfg.kafka.topic_findings, doc)
-
