@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 
 
@@ -62,8 +62,10 @@ class RuntimeConfig:
     backoff: float = float(os.getenv("SCAN_BACKOFF", "0.5"))
     max_backoff: float = float(os.getenv("SCAN_MAX_BACKOFF", "8"))
     concurrent_shards: int = _getint("SCAN_CONCURRENT_SHARDS", 1)
-    http_user_agents: List[str] = (
-        (os.getenv("HTTP_USER_AGENTS") or "Mozilla/5.0,Chrome/117,Safari/605").split(",")
+    http_user_agents: List[str] = field(
+        default_factory=lambda: (
+            (os.getenv("HTTP_USER_AGENTS") or "Mozilla/5.0,Chrome/117,Safari/605").split(",")
+        )
     )
     proxies_file: Optional[str] = _getenv("HTTP_PROXIES_FILE")
     # safety
@@ -75,12 +77,11 @@ class RuntimeConfig:
 
 @dataclass
 class AppConfig:
-    kafka: KafkaConfig = KafkaConfig()
-    elastic: ElasticConfig = ElasticConfig()
-    otel: OTelConfig = OTelConfig()
-    runtime: RuntimeConfig = RuntimeConfig()
+    kafka: KafkaConfig = field(default_factory=KafkaConfig)
+    elastic: ElasticConfig = field(default_factory=ElasticConfig)
+    otel: OTelConfig = field(default_factory=OTelConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
 
 
 def load_config() -> AppConfig:
     return AppConfig()
-
