@@ -14,6 +14,7 @@ from app.otel import init_otel
 from app.kafka_client import KafkaProducer
 from app.storage.elasticsearch_store import ElasticStore
 from app.orchestrator import Orchestrator, parse_ports_arg
+from app.middleware import ApiKeyMiddleware, TokenBucketLimiter
 
 
 class ScanBody(BaseModel):
@@ -37,6 +38,10 @@ kprod = KafkaProducer(cfg.kafka)
 orch = Orchestrator(cfg, es, kprod)
 
 app = FastAPI(title="GlobalScanner API", version="0.1.0")
+
+# Security and rate limiting
+app.add_middleware(ApiKeyMiddleware, api_key=os.getenv("API_KEY"))
+app.add_middleware(TokenBucketLimiter, capacity=int(os.getenv("RL_CAPACITY", "60")), refill_rate=float(os.getenv("RL_REFILL", "20")))
 
 
 @app.on_event("startup")
@@ -72,4 +77,3 @@ async def create_scan(body: ScanBody, tasks: BackgroundTasks):
     )
     log.info("scan_queued", scan_id=scan_id, targets=len(body.targets))
     return {"scan_id": scan_id}
-
