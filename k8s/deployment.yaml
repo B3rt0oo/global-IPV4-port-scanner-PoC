@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: globalscanner
+  labels:
+    app: globalscanner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: globalscanner
+  template:
+    metadata:
+      labels:
+        app: globalscanner
+    spec:
+      containers:
+        - name: api
+          image: your-registry/globalscanner:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: ES_ENABLED
+              value: "true"
+            - name: ES_URL
+              value: "http://elasticsearch:9200"
+            - name: KAFKA_ENABLED
+              value: "false"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1024Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: globalscanner
+spec:
+  selector:
+    app: globalscanner
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+
