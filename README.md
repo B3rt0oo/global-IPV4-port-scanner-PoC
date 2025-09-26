@@ -59,6 +59,7 @@
       - docker compose up -d elasticsearch api worker scheduler
 
   - The scheduler service reads `/config/schedules.yaml` (mapped from `./schedules.example.yaml` by default) and posts to `/scans` with `X-API-Key`.
+  - It can read a `targets_file`, batch targets fairly by /24 with `batch_size`, and stagger runs with `initial_delay` and small jitter.
   - To use an authorization file, mount it into the `api` container (e.g., `- ./AUTH.txt:/auth/AUTH.txt`) and set `auth_path: /auth/AUTH.txt` in the schedule.
 
   Example schedule entry (every 30 minutes):
@@ -70,9 +71,13 @@
   jobs:
     - name: my-ip-quick
       interval: 30m
+      # either inline targets or a file (one per line)
       targets: ["192.0.2.10"]
+      # targets_file: /config/targets.txt
       ports_spec: "22,80,443"
       auth_path: "/auth/AUTH.txt"
+      batch_size: 25
+      initial_delay: 0s
   ```
 
   Findings are indexed into Elasticsearch by the API/worker pipeline. Query with:
@@ -124,6 +129,12 @@
   - Kafka (optional): JSON events on `scanner.findings` and `scanner.events`
 
   ## Legal
+
+  ## Politeness Profiles & Adaptive Throttling
+
+  - Set `SCAN_PROFILE` to `low`, `medium`, or `high` to apply sane defaults (rate, concurrency, shard size, timeouts).
+  - Enable adaptive rate control with `SCAN_ADAPTIVE=true` (default). On sustained masscan shard failures, the scanner reduces rate by `SCAN_RATE_DECAY_PCT` down to `SCAN_RATE_MIN`.
+  - Recommended for constrained hosts (~0.5 vCPU / 8GB): `SCAN_PROFILE=medium` and keep `SCAN_CONCURRENT_SHARDS=1`.
 
   Use only with explicit authorization. Scanning without permission may be illegal and disruptive.
   ## Notes on the Legacy Script

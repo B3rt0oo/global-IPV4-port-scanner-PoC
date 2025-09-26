@@ -73,6 +73,12 @@ class RuntimeConfig:
     blocklist_file: Optional[str] = _getenv("SCAN_BLOCKLIST")
     demo: bool = _getbool("SCAN_DEMO", False)
     dry_run: bool = _getbool("SCAN_DRY_RUN", False)
+    # profile
+    profile: Optional[str] = _getenv("SCAN_PROFILE")
+    # adaptive controller
+    adaptive: bool = _getbool("SCAN_ADAPTIVE", True)
+    rate_min: int = _getint("SCAN_RATE_MIN", 100)
+    rate_decay_pct: int = _getint("SCAN_RATE_DECAY_PCT", 30)  # reduce by pct on sustained failures
 
 
 @dataclass
@@ -84,4 +90,29 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
-    return AppConfig()
+    cfg = AppConfig()
+    # Apply politeness profile overrides if requested
+    prof = (cfg.runtime.profile or "").strip().lower()
+    if prof in ("low", "medium", "high"):
+        if prof == "low":
+            cfg.runtime.masscan_rate = 200
+            cfg.runtime.concurrent_shards = 1
+            cfg.runtime.shard_size = 64
+            cfg.runtime.nmap_concurrency = 1
+            cfg.runtime.nmap_timeout = "30s"
+            cfg.runtime.retries = 0
+        elif prof == "medium":
+            cfg.runtime.masscan_rate = 500
+            cfg.runtime.concurrent_shards = 1
+            cfg.runtime.shard_size = 64
+            cfg.runtime.nmap_concurrency = 2
+            cfg.runtime.nmap_timeout = "45s"
+            cfg.runtime.retries = 0
+        else:  # high
+            cfg.runtime.masscan_rate = 1000
+            cfg.runtime.concurrent_shards = 2
+            cfg.runtime.shard_size = 128
+            cfg.runtime.nmap_concurrency = 4
+            cfg.runtime.nmap_timeout = "60s"
+            cfg.runtime.retries = 1
+    return cfg

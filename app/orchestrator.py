@@ -160,8 +160,34 @@ class Orchestrator:
             ports_list = ports or []
             ports_csv = ",".join(str(p) for p in ports_list) if ports_list else "1-1024,3306,3389,5432,6379,8080,8443"
 
+            # Adaptive controller state
+            current_rate = cfg.runtime.masscan_rate
+            min_rate = max(50, int(cfg.runtime.rate_min))
+            fail_shards = 0
+            total_shards = 0
+            rate_lock = asyncio.Lock()
+
             async def process_shard(shard: List[str]):
-                results, ok, err = await run_masscan_shard(shard, ports_csv, cfg.runtime.masscan_rate, cfg.runtime.masscan_wait, dry_run)
+                nonlocal current_rate, fail_shards, total_shards
+                # snapshot the rate under lock
+                async with rate_lock:
+                    rate_to_use = current_rate
+                results, ok, err = await run_masscan_shard(shard, ports_csv, rate_to_use, cfg.runtime.masscan_wait, dry_run)
+                # Update adaptive controller
+                if cfg.runtime.adaptive and not dry_run:
+                    async with rate_lock:
+                        total_shards += 1
+                        if not ok:
+                            fail_shards += 1
+                        # On sustained failures, reduce rate by decay pct down to min
+                        if total_shards >= 3:
+                            fail_ratio = fail_shards / max(1, total_shards)
+                            if fail_ratio >= 0.33 and current_rate > min_rate:
+                                decay = max(1, int(current_rate * (cfg.runtime.rate_decay_pct / 100.0)))
+                                new_rate = max(min_rate, current_rate - decay)
+                                if new_rate < current_rate:
+                                    log.warning("adaptive_rate_down", old=current_rate, new=new_rate, fail_ratio=f"{fail_ratio:.2f}")
+                                    current_rate = new_rate
                 if not ok:
                     metric_errors.add(1, {"stage": "masscan"})
                 for entry in results:

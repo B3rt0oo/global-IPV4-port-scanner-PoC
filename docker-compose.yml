@@ -42,6 +42,11 @@ services:
       - KAFKA_BOOTSTRAP=kafka:9092
       - LOG_LEVEL=INFO
       - API_KEY=devkey
+      # Politeness profile & adaptive throttling
+      - SCAN_PROFILE=medium
+      - SCAN_ADAPTIVE=true
+      - SCAN_RATE_MIN=100
+      - SCAN_RATE_DECAY_PCT=30
     depends_on:
       - elasticsearch
       - otel-collector
@@ -60,6 +65,11 @@ services:
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP=kafka:9092
       - LOG_LEVEL=INFO
+      # Politeness profile & adaptive throttling
+      - SCAN_PROFILE=medium
+      - SCAN_ADAPTIVE=true
+      - SCAN_RATE_MIN=100
+      - SCAN_RATE_DECAY_PCT=30
     depends_on:
       - elasticsearch
       - otel-collector
@@ -74,6 +84,7 @@ services:
       - API_URL=http://api:8080
     volumes:
       - ./schedules.example.yaml:/config/schedules.yaml:ro
+      - ./targets.example.txt:/config/targets.txt:ro
     depends_on:
       - api
       - elasticsearch

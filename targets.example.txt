@@ -1,0 +1,11 @@
+# One target per line. Blank lines and lines starting with # are ignored.
+# Use only targets you own or have explicit authorization to scan.
+
+# Example public IP (example.org)
+93.184.216.34
+
+# Documentation IPs (do not route on Internet; examples only)
+192.0.2.10
+198.51.100.5
+203.0.113.7
+
