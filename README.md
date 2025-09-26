@@ -49,6 +49,36 @@
 
   The API responds with `{ "scan_id": "..." }` and processes in background.
 
+  ## Scheduler (Recurring scans)
+
+  A lightweight scheduler is included to trigger scans on intervals via the REST API.
+
+  - Edit `schedules.example.yaml` (or copy to `schedules.yaml`) and set your targets/ports.
+  - Bring up Elasticsearch + API + worker + scheduler:
+
+      - docker compose up -d elasticsearch api worker scheduler
+
+  - The scheduler service reads `/config/schedules.yaml` (mapped from `./schedules.example.yaml` by default) and posts to `/scans` with `X-API-Key`.
+  - To use an authorization file, mount it into the `api` container (e.g., `- ./AUTH.txt:/auth/AUTH.txt`) and set `auth_path: /auth/AUTH.txt` in the schedule.
+
+  Example schedule entry (every 30 minutes):
+
+  ```yaml
+  api:
+    url: http://api:8080
+    api_key: devkey
+  jobs:
+    - name: my-ip-quick
+      interval: 30m
+      targets: ["192.0.2.10"]
+      ports_spec: "22,80,443"
+      auth_path: "/auth/AUTH.txt"
+  ```
+
+  Findings are indexed into Elasticsearch by the API/worker pipeline. Query with:
+
+  - `curl 'http://localhost:9200/findings/_search?q=*:*&size=5' | jq`
+
   ## Quickstart (Demo — no network)
 
   1. Create an auth file:
