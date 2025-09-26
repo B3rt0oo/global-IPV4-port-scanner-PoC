@@ -5,7 +5,7 @@ import asyncio
 import os
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 import httpx
 import yaml
@@ -27,6 +27,10 @@ class Job:
     dry_run: bool = False
     api_url: Optional[str] = None
     api_key: Optional[str] = None
+    # batching
+    batch_size: int = 25
+    initial_delay: float = 0.0
+    targets_file: Optional[str] = None
 
 
 @dataclass
@@ -67,6 +71,14 @@ def load_config(path: str) -> Config:
             raise ValueError("job.name is required")
         interval_s = parse_duration(str(j.get("interval", "1h")))
         targets = list(j.get("targets") or [])
+        # optional targets file
+        tf = j.get("targets_file")
+        if tf:
+            with open(tf, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    s = line.strip()
+                    if s and not s.startswith("#"):
+                        targets.append(s)
         if not targets:
             raise ValueError(f"job {name}: targets required")
         ports_spec = str(j.get("ports_spec") or "1-1024")
@@ -80,6 +92,9 @@ def load_config(path: str) -> Config:
             dry_run=bool(j.get("dry_run", False)),
             api_url=j.get("api_url"),
             api_key=j.get("api_key"),
+            batch_size=int(j.get("batch_size", 25)),
+            initial_delay=parse_duration(str(j.get("initial_delay", "0s"))) if j.get("initial_delay") else 0.0,
+            targets_file=tf,
         ))
     return Config(api_url=api_url, api_key=api_key, jobs=jobs)
 
@@ -99,19 +114,56 @@ async def post_scan(client: httpx.AsyncClient, url: str, api_key: str, body: Dic
 async def run_job(cfg: Config, j: Job, stop: asyncio.Event):
     api_url = j.api_url or cfg.api_url
     api_key = j.api_key or cfg.api_key
+    # Order targets fairly by /24 buckets, then chunk into batches
+    def prefix24(t: str) -> str:
+        try:
+            import ipaddress
+            ip = ipaddress.ip_address(t)
+            if isinstance(ip, ipaddress.IPv4Address):
+                parts = t.split('.')
+                return '.'.join(parts[:3]) + '.0/24'
+        except Exception:
+            pass
+        return 'misc'
+
+    buckets: Dict[str, List[str]] = {}
+    for t in j.targets:
+        buckets.setdefault(prefix24(t), []).append(t)
+    order: List[str] = []
+    # round-robin draw from buckets
+    while any(buckets.values()):
+        for k in list(buckets.keys()):
+            if buckets[k]:
+                order.append(buckets[k].pop(0))
+    # chunk
+    batches: List[List[str]] = [order[i:i+j.batch_size] for i in range(0, len(order), j.batch_size)]
+    if not batches:
+        batches = [order]
+
     async with httpx.AsyncClient() as client:
-        # immediate first run
+        # optional initial delay before first batch
+        if j.initial_delay > 0:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=j.initial_delay)
+                return
+            except asyncio.TimeoutError:
+                pass
+
+        batch_index = 0
+        # immediate first batch
+        cur = batches[batch_index]
+        batch_index = (batch_index + 1) % len(batches)
         scan_id = await post_scan(client, api_url, api_key, {
-            "targets": j.targets,
+            "targets": cur,
             "ports_spec": j.ports_spec,
             "auth_path": j.auth_path,
             "demo": j.demo,
             "dry_run": j.dry_run,
         })
         if scan_id:
-            log.info("scan_enqueued", job=j.name, scan_id=scan_id)
+            log.info("scan_enqueued", job=j.name, batch=len(cur), scan_id=scan_id)
         else:
-            log.warning("scan_enqueue_failed", job=j.name)
+            log.warning("scan_enqueue_failed", job=j.name, batch=len(cur))
 
         # loop
         while not stop.is_set():
@@ -124,17 +176,19 @@ async def run_job(cfg: Config, j: Job, stop: asyncio.Event):
             except asyncio.TimeoutError:
                 pass
 
+            cur = batches[batch_index]
+            batch_index = (batch_index + 1) % len(batches)
             scan_id = await post_scan(client, api_url, api_key, {
-                "targets": j.targets,
+                "targets": cur,
                 "ports_spec": j.ports_spec,
                 "auth_path": j.auth_path,
                 "demo": j.demo,
                 "dry_run": j.dry_run,
             })
             if scan_id:
-                log.info("scan_enqueued", job=j.name, scan_id=scan_id)
+                log.info("scan_enqueued", job=j.name, batch=len(cur), scan_id=scan_id)
             else:
-                log.warning("scan_enqueue_failed", job=j.name)
+                log.warning("scan_enqueue_failed", job=j.name, batch=len(cur))
 
 
 async def main_async(path: str):
@@ -166,4 +220,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
