@@ -84,6 +84,7 @@ services:
       - API_URL=http://api:8080
     volumes:
       - ./schedules.example.yaml:/config/schedules.yaml:ro
+      - ./targets.example.txt:/config/targets.txt:ro
     depends_on:
       - api
       - elasticsearch

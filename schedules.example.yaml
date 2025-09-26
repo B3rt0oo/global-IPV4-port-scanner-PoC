@@ -16,7 +16,7 @@ jobs:
   - name: weekly-wide
     interval: 168h
     # or provide a file with one target per line
-    # targets_file: /config/my_targets.txt
+    # targets_file: /config/targets.txt
     targets: ["93.184.216.34"]
     ports_spec: "1-1024"
     auth_path: "/auth/AUTH.txt"
@@ -24,3 +24,14 @@ jobs:
     dry_run: false
     batch_size: 25
     initial_delay: 5m
+
+  - name: batch-100
+    interval: 30m
+    # Mount ./targets.example.txt as /config/targets.txt in compose
+    targets_file: /config/targets.txt
+    ports_spec: "22,80,443"
+    auth_path: "/auth/AUTH.txt"
+    demo: false
+    dry_run: false
+    batch_size: 25
+    initial_delay: 0s
