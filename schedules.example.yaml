@@ -1,0 +1,21 @@
+api:
+  url: http://api:8080
+  api_key: devkey
+
+jobs:
+  - name: quick-demo
+    interval: 15m
+    targets: ["93.184.216.34"]
+    ports_spec: "80,443"
+    auth_path: "/auth/AUTH.txt"
+    demo: true
+    dry_run: false
+
+  - name: weekly-wide
+    interval: 168h
+    targets: ["93.184.216.34"]
+    ports_spec: "1-1024"
+    auth_path: "/auth/AUTH.txt"
+    demo: false
+    dry_run: false
+

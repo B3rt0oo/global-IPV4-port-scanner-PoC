@@ -65,3 +65,15 @@ services:
       - otel-collector
       - kafka
 
+  scheduler:
+    build: .
+    command: ["python", "-m", "app.worker.scheduler", "--config", "/config/schedules.yaml"]
+    environment:
+      - LOG_LEVEL=INFO
+      - API_KEY=devkey
+      - API_URL=http://api:8080
+    volumes:
+      - ./schedules.example.yaml:/config/schedules.yaml:ro
+    depends_on:
+      - api
+      - elasticsearch
